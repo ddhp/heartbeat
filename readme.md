@@ -101,6 +101,16 @@ Example:
 
 Alerts are notifications sent when tests fail. Supported alerts include `twilio` and `shell`.
 
+
+### Gmail
+sent alerts from gmail(preset is needed)
+|||
+|-|-|
+|sent_from|gmail address, required|
+|gmail_password|gmail's 3rd party password, required.|
+|to|mail address sending to, required.|
+|subject|The subject, required.|
+
 ### Twilio
 
 `twilio` uses the Twilio REST API to send a text message. Sign up for a free account (including a SMS number) at https://www.twilio.com/. Note that repeated alerts can rack up charges once your trial is exhausted, so be careful with your test settings.

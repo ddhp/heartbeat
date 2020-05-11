@@ -4,13 +4,17 @@ import hashlib
 import json
 import time
 import yaml
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 DATETIME_FORMAT = '%m/%d %H:%M'
-
 
 def format_now():
     return datetime.datetime.now().strftime(DATETIME_FORMAT)
 
+def format(s):
+    return time.gmtime(s).strftime(DATETIME_FORMAT)
 
 class Test:
     def __init__(self, owner, config):
@@ -42,29 +46,33 @@ class Test:
         return message
 
     def do_pass(self):
+        now = int(time.time())
         if self.get('state') != 'passing':
             self.owner.notify(self.expand_message(self.up_message))
             self.set('state', 'passing')
-            self.set('first_pass_time', format_now())
+            self.set('first_pass_time', now)
             self.set('last_fail_alert_time', 0)
         self.set('name', self.config['name'])
-        self.set('last_pass_time', format_now())
+        self.set('last_pass_time', now)
         self.set('fail_count', 0)
 
     def do_fail(self):
         fail_count = self.get('fail_count', 0) + 1
         self.set('name', self.config['name'])
         self.set('fail_count', fail_count)
+        now = int(time.time())
         if fail_count > self.ignore_fail_count:
             if self.get('state') != 'failing':
                 self.set('state', 'failing')
-                self.set('first_fail_time', format_now())
-            alert_time = time.time()
+                # self.set('first_fail_time', format_now())
+                self.set('first_fail_time', now)
+            # alert_time = time.time()
             last_alert_fail_time = self.get('last_fail_alert_time', 0)
-            if alert_time - last_alert_fail_time >= self.alert_period_hours * 60 * 60:
-                self.set('last_fail_alert_time', alert_time)
+            if now - last_alert_fail_time >= self.alert_period_hours * 5:
+                print('alert since 5s passed')
+                self.set('last_fail_alert_time', now)
                 self.owner.notify(self.expand_message(self.down_message))
-        self.set('last_fail_time', format_now())
+        self.set('last_fail_time', now)
 
 
 class ShellTest(Test):
@@ -133,7 +141,6 @@ class Alert:
     def __init__(self, config):
         pass
 
-
 class ShellAlert(Alert):
     def __init__(self, config):
         super().__init__(config)
@@ -161,8 +168,32 @@ class TwilioAlert(Alert):
         client.api.account.messages.create(
             to=self.to_number, from_=self.from_number, body=message)
 
+class GmailAlert(Alert):
+    def __init__(self, config):
+        super().__init__(config)
+        self.gmail_password = config['gmail_password']
+        self.sent_from = config['sent_from']
+        self.to = config['to']
+        self.subject = config['subject']
 
-ALERT_PROVIDERS = [('shell', ShellAlert), ('twilio', TwilioAlert)]
+    def send(self, message):
+        try:
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+            server.ehlo()
+            server.login(self.sent_from, self.gmail_password)
+            msg = MIMEMultipart()
+            msg['From'] = self.sent_from
+            msg['To'] = self.to
+            msg['Subject'] = self.subject
+            msg.attach(MIMEText(message, 'plain'))
+            server.sendmail(self.sent_from, self.to, msg.as_string())
+            server.close()
+            print('mail sent')
+        except Exception as e:
+            print(e)
+            print('Something went wrong...')
+
+ALERT_PROVIDERS = [('shell', ShellAlert), ('twilio', TwilioAlert), ('gmail', GmailAlert)]
 
 
 class Heartbeat:
@@ -175,13 +206,13 @@ class Heartbeat:
         for test in config:
             for key, provider in TEST_PROVIDERS:
                 if key in test:
-                    self.tests.append(provider(self, test[key]))
+                    self.tests.append(provider(self, test))
 
     def _load_alerts(self, config):
         for alert in config:
             for key, provider in ALERT_PROVIDERS:
                 if key in alert:
-                    self.alerts.append(provider(alert[key]))
+                    self.alerts.append(provider(alert))
 
     def load_config(self):
         with open('heartbeat.yaml') as config_file:
@@ -213,7 +244,6 @@ class Heartbeat:
         self.load_state()
         self.test()
         self.save_state()
-
 
 if __name__ == '__main__':
     heartbeat = Heartbeat()
