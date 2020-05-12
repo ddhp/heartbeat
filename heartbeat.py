@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import datetime
 import hashlib
 import json
 import time
@@ -7,11 +6,12 @@ import yaml
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from pathlib import Path
 
 DATETIME_FORMAT = '%m/%d %H:%M'
 
-def format_now():
-    return datetime.datetime.now().strftime(DATETIME_FORMAT)
+# without changing to string only works after python 3.5
+f_path = str(Path(__file__).parent) + '/'
 
 def format(s):
     return time.gmtime(s).strftime(DATETIME_FORMAT)
@@ -65,14 +65,13 @@ class Test:
         if fail_count > self.ignore_fail_count:
             if self.get('state') != 'failing':
                 self.set('state', 'failing')
-                # self.set('first_fail_time', format_now())
                 self.set('first_fail_time', now)
-            # alert_time = time.time()
             last_alert_fail_time = self.get('last_fail_alert_time', 0)
             if now - last_alert_fail_time >= self.alert_period_hours * 60 * 60:
                 print('alert since 5s passed')
                 self.set('last_fail_alert_time', now)
                 self.owner.notify(self.expand_message(self.down_message))
+            print('ignoring alert since less then 1 hour from previous failure')
         self.set('last_fail_time', now)
 
 
@@ -132,6 +131,7 @@ class HTTPTest(Test):
             else:
                 self.do_fail()
         except Exception as e:
+            print(e)
             self.do_fail()
 
 
@@ -215,20 +215,20 @@ class Heartbeat:
                     self.alerts.append(provider(alert))
 
     def load_config(self):
-        with open('heartbeat.yaml') as config_file:
+        with open(f_path + 'heartbeat.yaml') as config_file:
             config = yaml.safe_load(config_file)
         self._load_tests(config['tests'])
         self._load_alerts(config['alerts'])
 
     def load_state(self):
         try:
-            with open('.heartbeat.json') as state_file:
+            with open(f_path + '.heartbeat.json') as state_file:
                 self.state = json.load(state_file)
         except:
             self.state = {}
 
     def save_state(self):
-        with open('.heartbeat.json', 'w') as state_file:
+        with open(f_path + '.heartbeat.json', 'w') as state_file:
             json.dump(self.state, state_file)
 
     def notify(self, message):
