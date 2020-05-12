@@ -69,7 +69,7 @@ class Test:
                 self.set('first_fail_time', now)
             # alert_time = time.time()
             last_alert_fail_time = self.get('last_fail_alert_time', 0)
-            if now - last_alert_fail_time >= self.alert_period_hours * 5:
+            if now - last_alert_fail_time >= self.alert_period_hours * 60 * 60:
                 print('alert since 5s passed')
                 self.set('last_fail_alert_time', now)
                 self.owner.notify(self.expand_message(self.down_message))
